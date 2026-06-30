@@ -10,7 +10,8 @@ Finansal haberleri, Fed kararlarını ve sosyal medyayı API'ler üzerinden okuy
 - **Faz 1 (MVP)** — RSS → NLP (FinBERT/fallback) → DB uçtan uca boru hattı ✅
 - **Faz 2** — sinyal motoru (panic / euphoria / fed-tone, baseline z-skor, cooldown) ✅
 - **Faz 3** — uyarı kanalları (webhook/Slack/Telegram), canlı dashboard ✅
-- **Faz 4** — çoklu kaynak (Fed/sosyal), hibrit LLM, backtest (planlı)
+- **Faz 4** — hibrit NLP: router (FinBERT↔LLM) + LLM hawkish/dovish ✅
+- **Faz 5** — çoklu kaynak (Fed/sosyal canlı), backtest, kalibrasyon (planlı)
 
 ## Proje yapısı
 
@@ -82,6 +83,18 @@ uvicorn macro_sentiment.api.main:app --reload
 
 Sinyaller anomali-tabanlıdır (baseline z-skoru) ve aynı sinyal cooldown
 penceresinde tekrar yayınlanmaz. Eşikler backtest ile kalibre edilmelidir.
+
+## NLP modları
+
+`NLP_MODE` ile duyarlılık motoru seçilir:
+
+| Mod | Davranış |
+|---|---|
+| `finbert` | Yalnızca yerel FinBERT/sözlük — hızlı, ucuz (varsayılan). |
+| `llm` | Yalnızca LLM (Anthropic) — nüanslı, `LLM_API_KEY` gerekir. |
+| `hybrid` | Router: rutin metin→FinBERT, Fed/uzun/yüksek-etki→LLM. Maliyet kontrolü. |
+
+LLM yolu Fed metinlerinde **hawkish/dovish** duruşu sorar ve polariteye yansıtır. Anahtar yoksa veya LLM hata verirse otomatik FinBERT'e düşülür.
 
 ## Uyarılar
 
