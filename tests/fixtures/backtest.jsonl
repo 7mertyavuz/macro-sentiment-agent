@@ -1,0 +1,6 @@
+{"id":"bt1","title":"Apple shares surge as profit beats","body":"AAPL rallies to a record high, bullish momentum and strong gains","source_type":"news","entity":"AAPL","expected":"euphoria"}
+{"id":"bt2","title":"Bitcoin plunges amid recession fears","body":"BTC selloff with panic and heavy losses as recession fears spread","source_type":"news","entity":"BTC","expected":"panic"}
+{"id":"bt3","title":"Fed warns on inflation outlook","body":"The Fed warns of downgrade risks and a weak outlook for growth","source_type":"fed","entity":"FED","expected":"fed_tone"}
+{"id":"bt4","title":"Microsoft announces dividend schedule","body":"Microsoft set a routine quarterly dividend date for shareholders","source_type":"news","entity":"MSFT","expected":"none"}
+{"id":"bt5","title":"Tesla recalls vehicles","body":"Tesla stock falls after a downgrade and weak demand outlook","source_type":"news","entity":"TSLA","expected":"none"}
+{"id":"bt6","title":"Ethereum soars in rally","body":"ETH rally with euphoria, record gains and bullish sentiment","source_type":"news","entity":"ETH","expected":"euphoria"}

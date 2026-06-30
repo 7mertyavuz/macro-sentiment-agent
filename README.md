@@ -11,7 +11,8 @@ Finansal haberleri, Fed kararlarını ve sosyal medyayı API'ler üzerinden okuy
 - **Faz 2** — sinyal motoru (panic / euphoria / fed-tone, baseline z-skor, cooldown) ✅
 - **Faz 3** — uyarı kanalları (webhook/Slack/Telegram), canlı dashboard ✅
 - **Faz 4** — hibrit NLP: router (FinBERT↔LLM) + LLM hawkish/dovish ✅
-- **Faz 5** — çoklu kaynak (Fed/sosyal canlı), backtest, kalibrasyon (planlı)
+- **Faz 5** — backtest harness (precision/recall/F1, eşik kalibrasyonu) ✅
+- **Faz 6** — çoklu kaynak (Fed/sosyal canlı), TimescaleDB ölçek, HITL (planlı)
 
 ## Proje yapısı
 
@@ -49,6 +50,9 @@ python -m macro_sentiment.cli scores --entity AAPL
 
 # Üretilen sinyalleri görüntüle:
 python -m macro_sentiment.cli signals
+
+# Backtest — etiketli veriyle sinyal isabetini ölç:
+python -m macro_sentiment.cli backtest --dataset tests/fixtures/backtest.jsonl --verbose
 
 # Canlı RSS'ten uçtan uca (ağ gerekir; FinBERT kuruluysa otomatik kullanılır):
 python -m macro_sentiment.cli run --hours 24
@@ -112,6 +116,21 @@ Bir kanalın hatası diğerlerini etkilemez.
 | `USE_FINBERT` | `true` | `false` → sözlük fallback (torch gerekmez) |
 | `FINBERT_MODEL` | `ProsusAI/finbert` | HuggingFace model adı |
 | `RSS_FEEDS` | Yahoo/Investing | Çekilecek RSS akarları |
+
+## Backtest
+
+Etiketli geçmiş haberleri (`JSONL`) pipeline'dan geçirip üretilen sinyal tipini
+beklenen etiketle karşılaştırır; etiket bazında precision/recall/F1 ve genel
+accuracy raporlar. Eşik kalibrasyonunun temelidir.
+
+```
+[backtest] 6 kayıt | accuracy=100.00%
+etiket     precision  recall     f1    n
+panic           1.00    1.00   1.00    1
+euphoria        1.00    1.00   1.00    2
+```
+
+Veri formatı: her satır `{id, title, body, source_type, entity, expected}` (`expected` ∈ panic|euphoria|fed_tone|none).
 
 ## Test
 

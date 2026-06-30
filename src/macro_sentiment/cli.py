@@ -23,6 +23,8 @@ from .sources.rss_connector import RSSConnector
 from .storage.db import dispose_db, init_db
 from .storage.repositories import DocumentRepository, SentimentRepository, SignalRepository
 from .worker.tasks import RAW_TOPIC, ingest_once, nlp_drain
+from .backtest.dataset import load_jsonl
+from .backtest.harness import run_backtest
 
 
 def _model():
@@ -110,6 +112,21 @@ async def cmd_signals(args) -> None:
     await dispose_db()
 
 
+async def cmd_backtest(args) -> None:
+    records = load_jsonl(args.dataset)
+    report = await run_backtest(records, _model())
+    m = report.metrics
+    print(f"[backtest] {m.n} kayıt | accuracy={m.accuracy:.2%}")
+    print(f"{'etiket':10s} {'precision':>9s} {'recall':>7s} {'f1':>6s} {'n':>4s}")
+    for lab, lm in sorted(m.per_label.items()):
+        print(f"{lab:10s} {lm.precision:9.2f} {lm.recall:7.2f} {lm.f1:6.2f} {lm.support:4d}")
+    if args.verbose:
+        print("\n--- yanlışlar ---")
+        for d in report.details:
+            if not d["correct"]:
+                print(f"  {d['id']}: tahmin={d['predicted']} beklenen={d['expected']}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="macro_sentiment.cli")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -131,6 +148,11 @@ def main() -> None:
     pg.add_argument("--entity", default=None)
     pg.add_argument("--limit", type=int, default=20)
     pg.set_defaults(func=cmd_signals)
+
+    pb = sub.add_parser("backtest", help="Etiketli veriyle sinyal isabetini ölç")
+    pb.add_argument("--dataset", required=True, help="Etiketli JSONL dosyası")
+    pb.add_argument("--verbose", action="store_true")
+    pb.set_defaults(func=cmd_backtest)
 
     args = p.parse_args()
     asyncio.run(args.func(args))
