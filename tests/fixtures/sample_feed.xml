@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Finance Feed</title>
+    <link>https://example.com</link>
+    <description>Test feed for macro-sentiment-agent</description>
+    <item>
+      <title>Apple shares surge as profit beats estimates and guidance raised</title>
+      <link>https://example.com/news/1</link>
+      <guid>https://example.com/news/1</guid>
+      <description>AAPL rallies to a record high after strong quarterly growth and an upgrade from analysts.</description>
+      <pubDate>Mon, 29 Jun 2026 12:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Bitcoin plunges as recession fears trigger broad market selloff</title>
+      <link>https://example.com/news/2</link>
+      <guid>https://example.com/news/2</guid>
+      <description>BTC drops sharply amid panic selling; bearish sentiment and losses spread across crypto.</description>
+      <pubDate>Mon, 29 Jun 2026 13:30:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Federal Reserve holds rates steady, signals patience on cuts</title>
+      <link>https://example.com/news/3</link>
+      <guid>https://example.com/news/3</guid>
+      <description>The Fed kept policy unchanged, citing mixed data and an uncertain outlook for inflation.</description>
+      <pubDate>Mon, 29 Jun 2026 18:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

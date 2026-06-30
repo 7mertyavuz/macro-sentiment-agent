@@ -1,0 +1,5 @@
+# Üretim bağımlılıkları pyproject.toml içinde tanımlıdır.
+# Hızlı kurulum için:  pip install -e .
+# NLP ekstralarıyla:    pip install -e ".[nlp]"
+# Geliştirme:           pip install -e ".[dev]"
+-e .
