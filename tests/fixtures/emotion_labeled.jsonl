@@ -1,0 +1,8 @@
+# Küçük etiketli kalibrasyon seti (Faz 7) — emotion/uncertainty spot-check.
+# Her satır: {text, expect_uncertainty: "low"|"high"}
+{"text": "Apple beats earnings estimates with record quarterly revenue", "expect_uncertainty": "low"}
+{"text": "The Fed may possibly consider a rate move, but the outlook remains highly uncertain and unclear", "expect_uncertainty": "high"}
+{"text": "Bitcoin plunges as panic selloff accelerates amid recession fears", "expect_uncertainty": "low"}
+{"text": "Analysts are cautious; the mixed signals make the risky and unpredictable outlook ambiguous", "expect_uncertainty": "high"}
+{"text": "Stocks rally to a new record high on strong growth", "expect_uncertainty": "low"}
+{"text": "Markets could possibly rise or fall depending on unclear guidance, risk remains", "expect_uncertainty": "high"}

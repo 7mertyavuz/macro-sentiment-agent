@@ -85,3 +85,40 @@ async def test_hybrid_falls_back_when_llm_raises():
     hybrid = HybridSentiment(FinBERTSentiment(use_finbert=False), FailingLLM())
     out = await hybrid.score(_doc("recession crash", stype=SourceType.FED), _ents())
     assert out[0].model_version == "lexicon-fallback@1"  # hata → FinBERT
+
+
+# --- Faz 7: opt-in füzyon modu -----------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_hybrid_default_does_not_fuse():
+    """fuse_high_impact varsayılan False → eski davranış (yalnızca LLM) korunur."""
+    llm = LLMSentiment(MockLLMProvider({"polarity": -0.5, "stance": "hawkish",
+                       "fear": 0.4, "greed": 0.0, "intensity": 70, "confidence": 0.8}))
+    hybrid = HybridSentiment(FinBERTSentiment(use_finbert=False), llm)
+    out = await hybrid.score(_doc("FOMC minutes", stype=SourceType.FED), _ents())
+    assert out[0].model_version.startswith("llm-")
+    assert not out[0].model_version.startswith("fusion(")
+
+
+@pytest.mark.asyncio
+async def test_hybrid_fuse_high_impact_combines_finbert_and_llm():
+    llm = LLMSentiment(MockLLMProvider({"polarity": -0.5, "stance": "hawkish",
+                       "fear": 0.4, "greed": 0.0, "intensity": 70, "confidence": 0.8}))
+    hybrid = HybridSentiment(
+        FinBERTSentiment(use_finbert=False), llm, fuse_high_impact=True,
+    )
+    out = await hybrid.score(_doc("Fed warns of downgrade risk", stype=SourceType.FED), _ents())
+    assert out[0].model_version.startswith("fusion(")
+    assert "llm-" in out[0].model_version and "lexicon-fallback" in out[0].model_version
+
+
+@pytest.mark.asyncio
+async def test_hybrid_fuse_high_impact_skips_low_impact_docs():
+    """Rutin (düşük etkili) belgeler füzyon modunda bile yalnızca FinBERT'e gider."""
+    llm = LLMSentiment(MockLLMProvider({"polarity": 0.5, "stance": "neutral",
+                       "fear": 0.0, "greed": 0.4, "intensity": 60, "confidence": 0.8}))
+    hybrid = HybridSentiment(
+        FinBERTSentiment(use_finbert=False), llm, fuse_high_impact=True,
+    )
+    out = await hybrid.score(_doc("Apple surge beats record"), _ents())
+    assert out[0].model_version == "lexicon-fallback@1"

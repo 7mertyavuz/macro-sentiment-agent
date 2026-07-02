@@ -5,6 +5,8 @@
   python -m macro_sentiment.cli demo --sample tests/fixtures/sample_feed.xml
   python -m macro_sentiment.cli scores --entity AAPL
   python -m macro_sentiment.cli signals                              # üretilen sinyaller
+  python -m macro_sentiment.cli feed --entities FED BTC AAPL         # CAS SentimentState
+  python -m macro_sentiment.cli replay --scenario tests/fixtures/scenario.jsonl
 """
 from __future__ import annotations
 
@@ -19,10 +21,11 @@ from .ingestion.queue import get_queue
 from .nlp.factory import build_sentiment_model
 from .api.alerts import build_dispatcher
 from .signals.engine import SignalEngine
+from .sources.registry import active_connectors
 from .sources.rss_connector import RSSConnector
 from .storage.db import dispose_db, init_db
 from .storage.repositories import DocumentRepository, SentimentRepository, SignalRepository
-from .worker.tasks import RAW_TOPIC, ingest_once, nlp_drain
+from .worker.tasks import RAW_TOPIC, ingest_all_once, nlp_drain
 from .backtest.dataset import load_jsonl
 from .backtest.harness import run_backtest
 
@@ -63,7 +66,10 @@ async def cmd_run(args) -> None:
     doc_repo, sent_repo = DocumentRepository(), SentimentRepository()
     since = datetime.now(timezone.utc) - timedelta(hours=args.hours)
 
-    new = await ingest_once(RSSConnector(feeds=s.rss_feeds), queue, dedup, doc_repo, since)
+    # Faz 8: RSS her zaman etkin; NewsAPI/Fed yalnızca ilgili anahtar varsa eklenir.
+    connectors = active_connectors(s)
+    print(f"[kaynak] etkin: {', '.join(c.source_id for c in connectors)}")
+    new = await ingest_all_once(connectors, queue, dedup, doc_repo, since)
     print(f"[ingest] {new} yeni belge kuyruğa alındı")
     scored = await nlp_drain(queue, _model(), sent_repo)
     print(f"[nlp]    {scored} skor üretildi (model={_model().model_version})")
@@ -127,11 +133,57 @@ async def cmd_backtest(args) -> None:
                 print(f"  {d['id']}: tahmin={d['predicted']} beklenen={d['expected']}")
 
 
+async def cmd_feed(args) -> None:
+    """SentimentFeed adaptörünün ürettiği SentimentState'i gösterir (CAS köprüsü)."""
+    from .api.sentiment_feed import SentimentFeed
+
+    if args.mode == "live":
+        await init_db()
+    feed = SentimentFeed(mode=args.mode)
+    for entity in args.entities:
+        st = feed.latest(entity)
+        ft = "None" if st.fed_tone is None else f"{st.fed_tone:+.2f}"
+        print(
+            f"  {entity:6s}  pol={st.polarity:+.2f}  yoğ={st.intensity:5.1f}  "
+            f"güven={st.confidence:.2f}  korku={st.emotion['fear']:.2f}  "
+            f"açgöz={st.emotion['greed']:.2f}  belirsiz={st.emotion['uncertainty']:.2f}  "
+            f"fed_tone={ft}  kaynak={st.source_breakdown}"
+        )
+    if args.mode == "live":
+        await dispose_db()
+
+
+async def cmd_replay(args) -> None:
+    """JSONL senaryosunu deterministik oynatır; adım adım state + şok basar (API yok)."""
+    from .api.scenario import ScenarioPlayer
+    from .api.sentiment_feed import SentimentFeed
+
+    player = ScenarioPlayer.from_jsonl(args.scenario)
+    feed = SentimentFeed(mode="offline", scenario=player)
+    entities = args.entities or ["FED", "BTC", "AAPL"]
+    prev = feed.now
+    total_s = (player.end_ts - player.start_ts).total_seconds()
+    steps = max(1, int(total_s // args.step) + 1)
+    print(f"[replay] senaryo {total_s:.0f}s | adım={args.step}s | {steps} kare")
+    for _ in range(steps):
+        now = feed.advance(args.step)
+        for sh in feed.shocks(prev):
+            print(f"  t+{(sh.ts - player.start_ts).total_seconds():5.0f}s  ŞOK [{sh.kind:15s}] "
+                  f"{sh.entity:6s} mag={sh.magnitude:.2f} half={sh.decay_halflife_s:.0f}s")
+        for entity in entities:
+            st = feed.latest(entity)
+            if st.polarity == 0.0 and st.intensity == 0.0:
+                continue
+            print(f"  t+{(now - player.start_ts).total_seconds():5.0f}s  {entity:6s} "
+                  f"pol={st.polarity:+.2f} yoğ={st.intensity:5.1f}")
+        prev = now
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="macro_sentiment.cli")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    pr = sub.add_parser("run", help="Canlı RSS'ten uçtan uca çalıştır")
+    pr = sub.add_parser("run", help="Canlı kaynaklardan uçtan uca çalıştır")
     pr.add_argument("--hours", type=int, default=24)
     pr.set_defaults(func=cmd_run)
 
@@ -153,6 +205,17 @@ def main() -> None:
     pb.add_argument("--dataset", required=True, help="Etiketli JSONL dosyası")
     pb.add_argument("--verbose", action="store_true")
     pb.set_defaults(func=cmd_backtest)
+
+    pf = sub.add_parser("feed", help="CAS SentimentFeed (SentimentState) çıktısını göster")
+    pf.add_argument("--entities", nargs="+", default=["FED", "BTC", "AAPL"])
+    pf.add_argument("--mode", choices=["offline", "live"], default="offline")
+    pf.set_defaults(func=cmd_feed)
+
+    prp = sub.add_parser("replay", help="JSONL senaryosunu deterministik oynat (CAS)")
+    prp.add_argument("--scenario", required=True, help="Senaryo JSONL dosyası")
+    prp.add_argument("--step", type=float, default=300.0, help="Kare adımı (saniye)")
+    prp.add_argument("--entities", nargs="+", default=None)
+    prp.set_defaults(func=cmd_replay)
 
     args = p.parse_args()
     asyncio.run(args.func(args))

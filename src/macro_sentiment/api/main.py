@@ -4,6 +4,7 @@
   GET /                     → canlı dashboard
   GET /health
   GET /v1/signals, /v1/sentiment/{entity}
+  GET /v1/cas/sentiment/{entity}, /v1/cas/shocks?since=...
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from .. import __version__
 from ..observability.logging import configure_logging
 from ..storage.db import dispose_db, init_db
 from .dashboard import DASHBOARD_HTML
-from .routes import router as signals_router
+from .routes import cas_router, router as signals_router
 
 
 @asynccontextmanager
@@ -34,6 +35,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.include_router(signals_router)
+app.include_router(cas_router)
 
 
 @app.get("/", response_class=HTMLResponse, tags=["ui"])

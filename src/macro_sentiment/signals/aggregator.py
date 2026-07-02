@@ -5,7 +5,7 @@ WindowAggregate'e indirger: hacim + ortalama polarite/yoğunluk/duygu.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..core.models import SentimentScore
 
@@ -20,6 +20,22 @@ class WindowAggregate:
     mean_fear: float
     mean_greed: float
     mean_confidence: float
+    # Aşağıdaki alanlar CAS adaptörü (SentimentState) için eklendi. Varsayılanlı
+    # oldukları için mevcut çağıranlar ve testler kırılmaz (geriye uyumlu).
+    mean_uncertainty: float = 0.0
+    source_breakdown: dict = field(default_factory=dict)  # {source_type -> ort. polarite}
+
+
+def _source_breakdown(scores: list[SentimentScore]) -> dict:
+    """Skorları kaynak tipine göre gruplayıp her grup için ortalama polarite verir.
+
+    Anahtarlar SentimentState sözleşmesiyle uyumlu ham kaynak adlarıdır
+    ("news", "social", "fed", "market"). Yalnızca veride görülen kaynaklar döner.
+    """
+    buckets: dict[str, list[float]] = {}
+    for s in scores:
+        buckets.setdefault(s.source_type.value, []).append(s.polarity)
+    return {k: round(sum(v) / len(v), 4) for k, v in buckets.items()}
 
 
 def aggregate(entity: str, scores: list[SentimentScore], window: str = "recent") -> WindowAggregate:
@@ -37,4 +53,6 @@ def aggregate(entity: str, scores: list[SentimentScore], window: str = "recent")
         mean_fear=round(sum(s.emotion.fear for s in scores) * inv, 4),
         mean_greed=round(sum(s.emotion.greed for s in scores) * inv, 4),
         mean_confidence=round(sum(s.confidence for s in scores) * inv, 4),
+        mean_uncertainty=round(sum(s.emotion.uncertainty for s in scores) * inv, 4),
+        source_breakdown=_source_breakdown(scores),
     )

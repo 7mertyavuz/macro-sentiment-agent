@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from ..core.models import Emotion, Entity, RawDocument, SentimentScore, SourceType
 from . import lexicon_fallback
+from .fusion import derive_emotion
 from .llm_provider import LLMProvider
 from .preprocess import clean_text
 
@@ -20,7 +21,10 @@ _SYSTEM = (
     "Sen finansal metin duyarlılık analisti bir uzmansın. Verilen haber/açıklama "
     "metnini değerlendir ve SADECE şu şemada JSON döndür: "
     '{"polarity": -1..1, "intensity": 0..100, "confidence": 0..1, '
-    '"fear": 0..1, "greed": 0..1, "stance": "hawkish|dovish|neutral"}. '
+    '"fear": 0..1, "greed": 0..1, "uncertainty": 0..1, '
+    '"stance": "hawkish|dovish|neutral"}. '
+    "uncertainty, metindeki belirsizlik/tahmin/olası dilinin gücünü yansıtır "
+    "(ör. kesin rakamlar → düşük, 'olabilir/muhtemelen/belirsiz' → yüksek). "
     "stance yalnızca para politikası/merkez bankası bağlamında anlamlıdır; "
     "hawkish negatif (sıkılaşma), dovish pozitif (gevşeme) eğilimindedir."
 )
@@ -58,22 +62,12 @@ class LLMSentiment:
             polarity = sign * max(abs(polarity), 0.4)
 
         now = datetime.now(timezone.utc)
-        emotion = Emotion(
-            fear=float(data.get("fear", 0.0)),
-            greed=float(data.get("greed", 0.0)),
-            uncertainty=0.0,
+        text_for_fallback = clean_text(f"{doc.title or ''}. {doc.body}")
+        # LLM 'uncertainty' döndürmüşse onu kullan (modelin kendi değerlendirmesi
+        # sözlük sezgisinden daha nüanslıdır); dönmemişse/parse hatasında metinden türet.
+        uncertainty = (
+            float(data["uncertainty"])
+            if "uncertainty" in data
+            else derive_emotion(polarity, float(data.get("intensity", abs(polarity) * 100)), text_for_fallback).uncertainty
         )
-        return [
-            SentimentScore(
-                doc_id=doc.id,
-                entity=ent.ticker or ent.name,
-                polarity=max(-1.0, min(1.0, polarity)),
-                intensity=max(0.0, min(100.0, float(data.get("intensity", abs(polarity) * 100)))),
-                emotion=emotion,
-                confidence=max(0.0, min(1.0, float(data.get("confidence", 0.6)))),
-                model_version=self.model_version,
-                source_type=doc.source_type,
-                created_at=now,
-            )
-            for ent in entities
-        ]
+        emo

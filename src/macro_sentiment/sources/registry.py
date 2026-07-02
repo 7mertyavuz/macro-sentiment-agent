@@ -21,3 +21,19 @@ def get_connector(source_id: str) -> type[BaseConnector]:
     if source_id not in REGISTRY:
         raise KeyError(f"Bilinmeyen kaynak: {source_id}. Mevcut: {list(REGISTRY)}")
     return REGISTRY[source_id]
+
+
+def active_connectors(settings) -> list[BaseConnector]:
+    """Ayarlara göre etkin connector örneklerini oluşturur (Faz 8).
+
+    RSS her zaman etkindir (anahtarsız). NewsAPI/Fed yalnızca ilgili anahtar
+    ayarlandıysa listeye eklenir; anahtar yoksa sessizce atlanır — sistem
+    offline gibi çalışmaya devam eder. Sosyal connector (Faz 9) henüz bu
+    listeye dahil edilmiyor.
+    """
+    connectors: list[BaseConnector] = [RSSConnector(feeds=settings.rss_feeds)]
+    if settings.newsapi_key:
+        connectors.append(NewsAPIConnector(settings.newsapi_key))
+    if settings.fred_api_key:
+        connectors.append(FedConnector(settings.fred_api_key))
+    return connectors

@@ -44,13 +44,11 @@ class Settings(BaseSettings):
 
     poll_interval_news: int = 60
     poll_interval_social: int = 30
+    poll_interval_fed: int = 1800  # Fed nadiren yayın yapar; 30 dk yeterli (Faz 8)
 
 
 _settings: Settings | None = None
 
 
 def get_settings() -> Settings:
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+    global _se

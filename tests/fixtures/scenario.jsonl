@@ -1,0 +1,7 @@
+# Örnek CAS senaryosu — deterministik replay (API çağrısı yok).
+# t: senaryo başlangıcından saniye. type: news | sentiment | shock.
+{"t": 0, "type": "news", "title": "Fed warns on inflation outlook", "body": "The Fed warns of downgrade risks and a weak outlook for growth", "source_type": "fed", "entity": "FED"}
+{"t": 300, "type": "news", "title": "Bitcoin plunges amid recession fears", "body": "BTC selloff with panic and heavy losses as recession fears spread", "source_type": "news", "entity": "BTC"}
+{"t": 600, "type": "sentiment", "entity": "AAPL", "polarity": 0.62, "intensity": 74, "fear": 0.05, "greed": 0.7, "uncertainty": 0.2, "confidence": 0.8, "source_breakdown": {"news": 0.62, "social": 0.55}}
+{"t": 900, "type": "shock", "kind": "narrative_shift", "entity": "BTC", "magnitude": 0.7, "decay_halflife_s": 21600}
+{"t": 1200, "type": "news", "title": "Apple shares surge as profit beats", "body": "AAPL rallies to a record high, bullish momentum and strong gains", "source_type": "news", "entity": "AAPL"}

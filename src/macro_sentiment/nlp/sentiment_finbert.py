@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from ..core.models import Emotion, Entity, RawDocument, SentimentScore
 from . import lexicon_fallback
+from .fusion import derive_emotion
 from .preprocess import clean_text
 
 log = logging.getLogger(__name__)
@@ -51,12 +52,18 @@ class FinBERTSentiment:
         scores = self._pipeline(text[:_MAX_CHARS])[0]
         probs = {d["label"].lower(): float(d["score"]) for d in scores}
         pos, neg, neu = probs.get("positive", 0.0), probs.get("negative", 0.0), probs.get("neutral", 0.0)
+        polarity = round(pos - neg, 4)
+        intensity = round((pos + neg) * 100.0, 2)
+        # FinBERT'in kendisi belirsizlik üretmez (yalnızca pos/neg/nötr olasılık);
+        # metinden türetilen belirsizliği (Faz 7) ekliyoruz, sabit 0.0 değil.
+        uncertainty = derive_emotion(polarity, intensity, text).uncertainty
         return {
-            "polarity": round(pos - neg, 4),
-            "intensity": round((pos + neg) * 100.0, 2),
+            "polarity": polarity,
+            "intensity": intensity,
             "confidence": round(max(pos, neg, neu), 4),
             "fear": round(neg, 4),
             "greed": round(pos, 4),
+            "uncertainty": uncertainty,
         }
 
     async def score(self, doc: RawDocument, entities: list[Entity]) -> list[SentimentScore]:
@@ -64,7 +71,7 @@ class FinBERTSentiment:
         text = clean_text(f"{doc.title or ''}. {doc.body}")
         r = self._infer(text)
         now = datetime.now(timezone.utc)
-        emotion = Emotion(fear=r["fear"], greed=r["greed"], uncertainty=0.0)
+        emotion = Emotion(fear=r["fear"], greed=r["greed"], uncertainty=r.get("uncertainty", 0.0))
         return [
             SentimentScore(
                 doc_id=doc.id,
