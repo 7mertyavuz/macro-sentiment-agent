@@ -136,4 +136,4 @@ async def test_fomc_hawkish_text_moves_fed_tone_positive():
 
     agg = aggregate("FED", fed_scores)
     state = aggregate_to_state(agg)
-    assert state.fed_tone is not None and state.fed_tone > 0  # hawkish → sözleşmede p
+    assert state.fed_tone is not None and state.fed_tone > 0  # hawkish → sözleşmede pozitif

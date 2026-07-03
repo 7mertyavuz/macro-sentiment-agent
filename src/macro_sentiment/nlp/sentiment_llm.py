@@ -70,4 +70,22 @@ class LLMSentiment:
             if "uncertainty" in data
             else derive_emotion(polarity, float(data.get("intensity", abs(polarity) * 100)), text_for_fallback).uncertainty
         )
-        emo
+        emotion = Emotion(
+            fear=float(data.get("fear", 0.0)),
+            greed=float(data.get("greed", 0.0)),
+            uncertainty=max(0.0, min(1.0, uncertainty)),
+        )
+        return [
+            SentimentScore(
+                doc_id=doc.id,
+                entity=ent.ticker or ent.name,
+                polarity=max(-1.0, min(1.0, polarity)),
+                intensity=max(0.0, min(100.0, float(data.get("intensity", abs(polarity) * 100)))),
+                emotion=emotion,
+                confidence=max(0.0, min(1.0, float(data.get("confidence", 0.6)))),
+                model_version=self.model_version,
+                source_type=doc.source_type,
+                created_at=now,
+            )
+            for ent in entities
+        ]
