@@ -95,3 +95,8 @@ class Signal(BaseModel):
     headline: str = Field(..., description="İnsan-okunur özet, örn. 'BTC — aşırı korku'")
     payload: dict = Field(default_factory=dict)
     created_at: datetime
+    # Faz 11: HITL inceleme durumu. None = inceleme gerektirmedi (varsayılan,
+    # eski davranış); "pending" = onay bekliyor (dağıtılmadı); "approved" /
+    # "rejected" = insan kararı verildi. Varsayılanlı olduğu için mevcut
+    # çağıranlar/testler etkilenmez (geriye uyum).
+    review_status: str | None = None

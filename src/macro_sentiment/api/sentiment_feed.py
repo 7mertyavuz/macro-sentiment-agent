@@ -129,6 +129,12 @@ class SentimentFeed:
         live modda kullanılacak repository'ler (test için enjekte edilebilir).
     window_size:
         live modda pencere başına çekilecek skor sayısı.
+    strict_review:
+        ``True`` ise (Faz 11) ``live`` modda ``"pending"``/``"rejected"``
+        durumundaki sinyaller şok olarak enjekte edilmez — yalnızca onaylı
+        (``"approved"``) veya hiç incelemeye girmemiş (``None`` — düşük etkili)
+        sinyaller şoka çevrilir. Varsayılan ``False`` — geriye uyum (eski
+        davranış: tüm sinyaller şok olur).
     """
 
     def __init__(
@@ -139,12 +145,14 @@ class SentimentFeed:
         sent_repo=None,
         sig_repo=None,
         window_size: int = 50,
+        strict_review: bool = False,
     ) -> None:
         if mode not in ("offline", "live"):
             raise ValueError(f"Geçersiz mod: {mode!r} (offline|live)")
         self.mode = mode
         self.scenario = scenario
         self.window_size = window_size
+        self.strict_review = strict_review
         self._sent_repo = sent_repo
         self._sig_repo = sig_repo
         # Replay saati: offline+scenario modunda ilerletilir.
@@ -178,6 +186,8 @@ class SentimentFeed:
     def shocks(self, since: datetime) -> list[ShockEvent]:
         if self.mode == "live":
             signals = _run(self._repo_sig().query(since=since, limit=200))
+            if self.strict_review:
+                signals = [s for s in signals if s.review_status in (None, "approved")]
             out: list[ShockEvent] = []
             for sig in sorted(signals, key=lambda s: s.created_at):
                 kind = _SIGNAL_KIND_MAP.get(sig.type.value)

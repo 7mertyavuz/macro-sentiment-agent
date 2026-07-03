@@ -17,7 +17,9 @@ Finansal haberleri, Fed kararlarını ve sosyal medyayı API'ler üzerinden okuy
 - **Faz 7** — NLP kalitesi: skor füzyonu (`fuse`), gerçek `emotion.uncertainty` (artık sabit 0.0 değil), olumsuzlama-lite, sarkazm-lite ✅
 - **Faz 8** — canlı kaynaklar I: NewsAPI (`/v2/everything`) + Fed basın açıklamaları (RSS, FOMC etiketleme), anahtar yoksa sessizce atlanır ✅
 - **Faz 9** — canlı kaynaklar II: StockTwits (anahtarsız, açık onayla), bot/spam sezgileri, sosyal metin temizliği; Twitter/Reddit anahtarsızken sessizce atlanır ✅
-- **Faz 10+** — TimescaleDB ölçek, HITL kalibrasyon döngüsü, gözlemlenebilirlik — bkz. [`docs/CAS-ROADMAP.md`](./docs/CAS-ROADMAP.md)
+- **Faz 10** — kalıcı taban çizgisi: `BaselineRepository` (Welford rolling mean/std), `SignalEngine` artık hacim z-skorunu otomatik yükler/günceller; SQLite dev yolu korunur ✅
+- **Faz 11** — HITL inceleme kuyruğu: yüksek-etki sinyaller onay bekler (dağıtılmaz), `/v1/review/*` onay/ret uçları, geri besleme deposu, backtest F1'i düşürmeyen otomatik eşik kalibrasyonu ✅
+- **Faz 12** — gözlemlenebilirlik, CI, operasyonel sertleştirme — bkz. [`docs/CAS-ROADMAP.md`](./docs/CAS-ROADMAP.md)
 
 ## Proje yapısı
 
@@ -326,6 +328,60 @@ tüketen motora bırakılır (değişmez ilke #6).
 python -m macro_sentiment.cli run --hours 24
 #   [kaynak] etkin: rss, newsapi, fed, social
 ```
+
+## Kalıcı taban çizgisi (Faz 10)
+
+Önceden `SignalEngine.evaluate_entity()` hacim taban çizgisini yalnızca
+çağıran taraf açıkça bir `Baseline` verirse kullanıyordu — bellek içi, süreç
+kapanınca kaybolan bir değerdi. Artık `storage/repositories.py::BaselineRepository`
+`BaselineORM` tablosu (`baselines`, `entity`+`metric` birincil anahtar) üzerinden
+kalıcıdır:
+
+- `volume_baseline` **verilmezse** (yeni/varsayılan yol): motor taban çizgisini
+  DB'den okur, hacim z-skoru için kullanır, ardından mevcut hacimle
+  günceller (Welford tek-geçiş algoritması — tüm geçmiş seri saklanmaz).
+- `volume_baseline` **açıkça verilirse** (eski çağrı biçimi): DB'ye hiç
+  dokunulmaz — geriye uyum korunur, eski testler/çağıranlar değişmeden çalışır.
+
+Bu sayede taban çizgisi süreç yeniden başlatıldığında korunur ve rolling
+z-skor zamanla anlam kazanır (ör. ani hacim patlamaları taban çizgisi
+oturduktan sonra daha güvenilir şekilde tespit edilir). SQLite dev yolu
+(`DATABASE_URL=sqlite+aiosqlite:///...`) hâlâ birincil test ortamıdır;
+Postgres/TimescaleDB'ye geçiş yalnızca `DATABASE_URL` değişikliği gerektirir
+— `baselines` tablosu düşük hacimli/upsert ağırlıklı olduğu için hypertable'a
+çevrilmesi gerekmez.
+
+## HITL inceleme kuyruğu ve kalibrasyon (Faz 11)
+
+`signals/review.py::needs_review(signal)` şiddeti `REVIEW_SEVERITY_THRESHOLD`
+(varsayılan 70.0) üzerindeki sinyalleri işaretler. `SignalEngine.evaluate_entity()`
+artık böyle bir sinyal ürettiğinde onu `Signal.review_status="pending"` ile
+DB'ye yazar ama **`AlertDispatcher.dispatch()` çağırmaz** — dağıtım insan
+onayına kadar durur. Düşük-etkili sinyaller (varsayılan `review_status=None`)
+eskisi gibi hemen dağıtılır; bu yüzden mevcut testler/entegrasyonlar değişmeden
+çalışır.
+
+```
+GET  /v1/review/pending              → bekleyen (pending) sinyaller
+POST /v1/review/{id}/approve         → onay; review_status="approved"
+POST /v1/review/{id}/reject          → ret; review_status="rejected"
+```
+
+Her karar `storage/repositories.py::FeedbackRepository` üzerinden
+`review_feedback` tablosuna kalıcı olarak yazılır (kim, ne zaman, hangi
+sinyal, hangi karar) — ileride gerçekleşen piyasa sonucu etiketiyle
+zenginleştirilip backtest setine akıtılabilir.
+
+**Katı mod:** `SentimentFeed(mode="live", strict_review=True)` ile `shocks()`
+yalnızca onaylı (`"approved"`) veya hiç incelemeye girmemiş (`None`, düşük
+etkili) sinyalleri şok olarak enjekte eder — `"pending"`/`"rejected"` CAS'a
+sızmaz. Varsayılan `strict_review=False` eski davranışı korur.
+
+**Otomatik eşik kalibrasyonu** — `signals/calibration.py::suggest_threshold()`
+bir kural parametresi (ör. `PanicRule.pol_threshold`) için grid arama yapar;
+mevcut (baseline) değer her zaman aday kümesine dahil edildiğinden öneri
+**hiçbir zaman** backtest makro-F1'ini düşüremez (en kötü ihtimalle baseline'ı
+geri döndürür — regresyon testiyle doğrulanır).
 
 ## NLP kalitesi — füzyon, gerçek belirsizlik, olumsuzlama/sarkazm (Faz 7)
 

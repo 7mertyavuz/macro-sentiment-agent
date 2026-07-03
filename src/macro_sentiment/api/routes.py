@@ -3,15 +3,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from ..core.models import Signal
-from ..storage.repositories import SentimentRepository, SignalRepository
+from ..signals.review import APPROVED, PENDING, REJECTED, ReviewFeedback
+from ..storage.repositories import FeedbackRepository, SentimentRepository, SignalRepository
 from .cas_transport import CAS_SCHEMA_VERSION, sentiment_state_to_dict, shock_event_to_dict
 from .sentiment_feed import SentimentFeed
 
 router = APIRouter(prefix="/v1", tags=["signals"])
 cas_router = APIRouter(prefix="/v1/cas", tags=["cas"])
+review_router = APIRouter(prefix="/v1/review", tags=["review"])
 
 
 @router.get("/signals", response_model=list[Signal])
@@ -71,3 +73,36 @@ async def cas_shocks(
         "since": since_ts.isoformat(),
         "shocks": [shock_event_to_dict(s) for s in shocks],
     }
+
+
+# ---- HITL inceleme kuyruğu (Faz 11) --------------------------------------------
+# Yüksek-etki sinyaller (bkz. signals/review.py::needs_review) motor tarafından
+# "pending" olarak kaydedilir ama dağıtılmaz. Bu uçlar insan onay/ret akışını
+# sağlar; karar FeedbackRepository'ye yazılır (backtest/kalibrasyon için).
+
+@review_router.get("/pending", response_model=list[Signal])
+async def list_pending(limit: int = Query(50, le=500)) -> list[Signal]:
+    return await SignalRepository().query(review_status=PENDING, limit=limit)
+
+
+async def _decide(signal_id: str, decision: str, reviewer: str | None, note: str | None) -> Signal:
+    sig = await SignalRepository().set_review_status(signal_id, decision)
+    if sig is None:
+        raise HTTPException(status_code=404, detail=f"Sinyal bulunamadı: {signal_id}")
+    await FeedbackRepository().save(
+        ReviewFeedback(
+            signal_id=sig.id, entity=sig.entity, signal_type=sig.type.value,
+            decision=decision, reviewer=reviewer, note=note,
+        )
+    )
+    return sig
+
+
+@review_router.post("/{signal_id}/approve", response_model=Signal)
+async def approve_signal(signal_id: str, reviewer: str | None = None, note: str | None = None) -> Signal:
+    return await _decide(signal_id, APPROVED, reviewer, note)
+
+
+@review_router.post("/{signal_id}/reject", response_model=Signal)
+async def reject_signal(signal_id: str, reviewer: str | None = None, note: str | None = None) -> Signal:
+    return await _decide(signal_id, REJECTED, reviewer, note)

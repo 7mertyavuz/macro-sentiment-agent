@@ -5,6 +5,7 @@
   GET /health
   GET /v1/signals, /v1/sentiment/{entity}
   GET /v1/cas/sentiment/{entity}, /v1/cas/shocks?since=...
+  GET /v1/review/pending, POST /v1/review/{id}/approve|reject
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from .. import __version__
 from ..observability.logging import configure_logging
 from ..storage.db import dispose_db, init_db
 from .dashboard import DASHBOARD_HTML
-from .routes import cas_router, router as signals_router
+from .routes import cas_router, review_router, router as signals_router
 
 
 @asynccontextmanager
@@ -36,6 +37,7 @@ app = FastAPI(
 )
 app.include_router(signals_router)
 app.include_router(cas_router)
+app.include_router(review_router)
 
 
 @app.get("/", response_class=HTMLResponse, tags=["ui"])
