@@ -16,14 +16,15 @@ Finansal haberleri, Fed kararlarını ve sosyal medyayı API'ler üzerinden okuy
 - **Faz 6** — CAS köprüsü sağlamlaştırma: serileştirme (`to_dict`/`from_dict` + `schema_version`), şok sönümleme, `stream()` push API, senaryo şema doğrulama, `/v1/cas/*` HTTP uçları ✅
 - **Faz 7** — NLP kalitesi: skor füzyonu (`fuse`), gerçek `emotion.uncertainty` (artık sabit 0.0 değil), olumsuzlama-lite, sarkazm-lite ✅
 - **Faz 8** — canlı kaynaklar I: NewsAPI (`/v2/everything`) + Fed basın açıklamaları (RSS, FOMC etiketleme), anahtar yoksa sessizce atlanır ✅
-- **Faz 9+** — sosyal (X/Reddit/StockTwits) + bot/spam filtresi, TimescaleDB ölçek, HITL — bkz. [`docs/CAS-ROADMAP.md`](./docs/CAS-ROADMAP.md)
+- **Faz 9** — canlı kaynaklar II: StockTwits (anahtarsız, açık onayla), bot/spam sezgileri, sosyal metin temizliği; Twitter/Reddit anahtarsızken sessizce atlanır ✅
+- **Faz 10+** — TimescaleDB ölçek, HITL kalibrasyon döngüsü, gözlemlenebilirlik — bkz. [`docs/CAS-ROADMAP.md`](./docs/CAS-ROADMAP.md)
 
 ## Proje yapısı
 
 ```
 src/macro_sentiment/
   core/        # veri modelleri, sözleşmeler (Protocol), config
-  sources/     # Katman 1 — RSS (gerçek) + NewsAPI/Fed/social (stub)
+  sources/     # Katman 1 — RSS + NewsAPI + Fed + StockTwits (gerçek); Twitter/Reddit (stub)
   ingestion/   # Katman 2 — collector, dedup, kuyruk (InMemory + Redis)
   nlp/         # Katman 3 — preprocess, NER-lite, FinBERT + sözlük fallback
   signals/     # Katman 4 — aggregator, baseline, kural/anomali (Faz 2)
@@ -295,6 +296,36 @@ python -m macro_sentiment.cli run --hours 24
 Sürekli (üretim) polling için: `worker/tasks.py::poll_connector_forever(connector, ...)`
 her kaynağı kendi `POLL_INTERVAL_*` aralığıyla (`POLL_INTERVAL_NEWS`,
 `POLL_INTERVAL_FED`) ayrı bir `asyncio.Task` olarak çalıştırabilir.
+
+## Canlı kaynaklar — sosyal + bot/spam filtresi (Faz 9)
+
+`sources/social_connector.py` — **StockTwits** sembol akışı
+(`/api/2/streams/symbol/{symbol}.json`) herkese açık ve anahtarsızdır; Fed RSS'e
+benzer şekilde ilk gerçek canlı sosyal kaynak. Gürültülü/riskli bir kaynak
+olduğu için varsayılan **kapalı** — `.env`'de `STOCKTWITS_ENABLED=true` ile açık
+onay gerekir (`SOCIAL_SYMBOLS` ile taranacak semboller ayarlanır). Twitter/Reddit
+resmi OAuth gerektirir; bu fazda anahtarsızken (varsayılan) `fetch()` **ağa hiç
+çıkmadan** boş liste döner — gerçek entegrasyonları kapsam dışı bırakıldı.
+
+**Bot/spam filtresi** (`nlp/spam_filter.py`) her StockTwits turunda otomatik
+uygulanır: çok yeni hesap + neredeyse hiç takipçi, veya kopya/near-duplicate
+metin → akıştan **düşürülür**; sınırda şüpheli sinyaller (genç hesap, az
+takipçi, yüksek hashtag/mention yoğunluğu) düşürülmez ama
+`raw_meta["spam_suspicious"] = True` ile işaretlenir.
+
+**Metin temizliği** (`ingestion/normalizer.py::strip_social_noise`) URL'leri
+kaldırır, fazla boşluğu sıkıştırır; cashtag'lere ($AAPL) dokunmaz (NER bunlara
+dayanır).
+
+**Çift sayım engeli** — sosyal skorlar `signals/aggregator.py::source_breakdown`
+içinde `"social"` anahtarı altında haber/Fed'den ayrı tutulur; ağırlık kararı
+tüketen motora bırakılır (değişmez ilke #6).
+
+```bash
+# .env içinde STOCKTWITS_ENABLED=true ise otomatik etkinleşir:
+python -m macro_sentiment.cli run --hours 24
+#   [kaynak] etkin: rss, newsapi, fed, social
+```
 
 ## NLP kalitesi — füzyon, gerçek belirsizlik, olumsuzlama/sarkazm (Faz 7)
 

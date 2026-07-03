@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     reddit_client_id: str | None = None
     reddit_client_secret: str | None = None
     fred_api_key: str | None = None
+    stocktwits_enabled: bool = False
+    social_symbols: list[str] = ["AAPL", "MSFT", "TSLA", "BTC.X", "SPY"]
 
     finbert_model: str = "ProsusAI/finbert"
     use_finbert: bool = True
