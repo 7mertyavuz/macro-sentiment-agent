@@ -16,8 +16,10 @@ dependencies = [
     "feedparser>=6.0",        # RSS connector
     "redis>=5.0",             # kuyruk + önbellek + dedup
     "sqlalchemy>=2.0",        # ORM
-    "asyncpg>=0.29",          # async postgres
+    "asyncpg>=0.29",          # async postgres (üretim)
+    "aiosqlite>=0.20",        # async sqlite (dev/test varsayılan DATABASE_URL)
     "structlog>=24.1",        # yapılandırılmış log
+    "prometheus-client>=0.20",  # /metrics (Faz 12)
 ]
 
 [project.optional-dependencies]
@@ -29,6 +31,7 @@ nlp = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
     "ruff>=0.4",
     "mypy>=1.10",
 ]

@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from ..core.models import Emotion, Entity, RawDocument, SentimentScore, SourceType
+from ..observability.metrics import inference_seconds
 from . import lexicon_fallback
 from .fusion import derive_emotion
 from .llm_provider import LLMProvider
@@ -48,7 +49,8 @@ class LLMSentiment:
 
     async def score(self, doc: RawDocument, entities: list[Entity]) -> list[SentimentScore]:
         try:
-            data = await self.provider.complete_json(_SYSTEM, _user_prompt(doc, entities))
+            with inference_seconds.labels(model=self.model_version).time():
+                data = await self.provider.complete_json(_SYSTEM, _user_prompt(doc, entities))
         except Exception as exc:
             log.warning("LLM çağrısı/parse başarısız (%s); sözlük fallback.", exc)
             data = lexicon_fallback.score_text(clean_text(f"{doc.title or ''}. {doc.body}"))

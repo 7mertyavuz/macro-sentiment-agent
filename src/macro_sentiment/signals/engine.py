@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 
+from ..observability.metrics import signals_emitted_total
 from ..storage.repositories import BaselineRepository, SentimentRepository, SignalRepository
 from .aggregator import aggregate
 from .baseline import Baseline, zscore
@@ -71,6 +72,9 @@ class SignalEngine:
                     if self.dispatcher is not None:
                         await self.dispatcher.dispatch(sig)
                 emitted.append(sig)
+                signals_emitted_total.labels(
+                    type=sig.type.value, review_status=sig.review_status or "auto"
+                ).inc()
                 log.info("Sinyal: %s (review_status=%s)", sig.headline, sig.review_status)
 
         if persist_baseline:

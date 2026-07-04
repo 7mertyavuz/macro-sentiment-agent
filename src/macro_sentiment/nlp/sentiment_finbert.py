@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timezone
 
 from ..core.models import Emotion, Entity, RawDocument, SentimentScore
+from ..observability.metrics import inference_seconds
 from . import lexicon_fallback
 from .fusion import derive_emotion
 from .preprocess import clean_text
@@ -69,7 +70,8 @@ class FinBERTSentiment:
     async def score(self, doc: RawDocument, entities: list[Entity]) -> list[SentimentScore]:
         self._ensure_loaded()
         text = clean_text(f"{doc.title or ''}. {doc.body}")
-        r = self._infer(text)
+        with inference_seconds.labels(model=self.model_version).time():
+            r = self._infer(text)
         now = datetime.now(timezone.utc)
         emotion = Emotion(fear=r["fear"], greed=r["greed"], uncertainty=r.get("uncertainty", 0.0))
         return [

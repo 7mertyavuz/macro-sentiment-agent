@@ -13,6 +13,7 @@ from collections import defaultdict
 from typing import AsyncIterator
 
 from ..core.config import get_settings
+from ..observability.metrics import queue_depth
 
 
 class InMemoryQueue:
@@ -23,6 +24,7 @@ class InMemoryQueue:
 
     async def publish(self, topic: str, message: dict) -> None:
         await self._topics[topic].put(message)
+        queue_depth.labels(topic=topic).set(self._topics[topic].qsize())
 
     async def consume(self, topic: str, group: str = "default") -> AsyncIterator[dict]:
         q = self._topics[topic]
@@ -35,6 +37,7 @@ class InMemoryQueue:
         out: list[dict] = []
         while not q.empty():
             out.append(q.get_nowait())
+        queue_depth.labels(topic=topic).set(q.qsize())
         return out
 
     def qsize(self, topic: str) -> int:

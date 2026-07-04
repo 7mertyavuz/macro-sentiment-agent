@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from ..core.contracts import Deduplicator, MessageQueue, SentimentModel, SourceConnector
 from ..core.models import RawDocument
 from ..nlp.ner import FinancialEntityExtractor
+from ..observability.metrics import documents_fetched_total, source_fetch_errors_total
 from ..storage.repositories import DocumentRepository, SentimentRepository
 
 log = logging.getLogger(__name__)
@@ -50,6 +51,9 @@ async def ingest_once(
         await doc_repo.save(doc)
         await queue.publish(RAW_TOPIC, doc.model_dump(mode="json"))
         new += 1
+    source_id = getattr(connector, "source_id", connector.__class__.__name__)
+    if new:
+        documents_fetched_total.labels(source=source_id).inc(new)
     log.info("ingest_once: %d çekildi, %d yeni", len(docs), new)
     return new
 
@@ -72,6 +76,7 @@ async def ingest_all_once(
         try:
             total += await ingest_once(connector, queue, dedup, doc_repo, since)
         except Exception:
+            source_fetch_errors_total.labels(source=source_id).inc()
             log.exception("Kaynak çekimi başarısız (%s); bu tur atlanıyor", source_id)
     return total
 
@@ -98,6 +103,7 @@ async def poll_connector_forever(
             if new:
                 log.info("poll[%s]: %d yeni belge", source_id, new)
         except Exception:
+            source_fetch_errors_total.labels(source=source_id).inc()
             log.exception("poll[%s]: tur başarısız", source_id)
         await asyncio.sleep(interval_s)
 

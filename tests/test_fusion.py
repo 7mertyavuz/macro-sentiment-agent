@@ -159,8 +159,8 @@ def test_lexicon_sarcasm_lowers_confidence():
 # ---- kalibrasyon spot-check (roadmap "bitti tanımı") -----------------------------------
 
 def test_emotion_labeled_fixture_uncertainty_direction():
-    rows = [json.loads(l) for l in (FIXTURES / "emotion_labeled.jsonl").read_text().splitlines()
-            if l.strip() and not l.startswith("#")]
+    rows = [json.loads(line) for line in (FIXTURES / "emotion_labeled.jsonl").read_text().splitlines()
+            if line.strip() and not line.startswith("#")]
     low_group = [lexicon_fallback.score_text(r["text"])["uncertainty"]
                  for r in rows if r["expect_uncertainty"] == "low"]
     high_group = [lexicon_fallback.score_text(r["text"])["uncertainty"]

@@ -1,5 +1,7 @@
-# Faz 0/1 yerel geliştirme altyapısı.
-# Postgres (TimescaleDB) + Redis. API ve worker uygulama tarafında çalışır.
+# Yerel/self-host dağıtım altyapısı (Faz 0-12).
+# Postgres (TimescaleDB) + Redis + api + worker. Prod'da DATABASE_URL/REDIS_URL
+# ile yönetilen bir Postgres/Redis'e işaret edilebilir; bu dosya self-host
+# referans kurulumudur (docs/RUNBOOK.md'de deploy checklist'i ile birlikte).
 services:
   db:
     image: timescale/timescaledb:latest-pg16
@@ -11,19 +13,51 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U msa"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
-  # TODO(Faz 1): api ve worker servislerini ekle
-  # api:
-  #   build: .
-  #   command: uvicorn macro_sentiment.api.main:app --host 0.0.0.0 --port 8000
-  #   env_file: .env
-  #   depends_on: [db, redis]
-  #   ports: ["8000:8000"]
+  api:
+    build: .
+    command: uvicorn macro_sentiment.api.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://msa:msa@db:5432/macro_sentiment
+      REDIS_URL: redis://redis:6379/0
+      QUEUE_BACKEND: redis
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: .
+    command: python -m macro_sentiment.cli run --hours 1
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://msa:msa@db:5432/macro_sentiment
+      REDIS_URL: redis://redis:6379/0
+      QUEUE_BACKEND: redis
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
 volumes:
   pgdata:

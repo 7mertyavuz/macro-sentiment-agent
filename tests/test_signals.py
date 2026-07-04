@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from macro_sentiment.core.models import Emotion, SentimentScore, SignalType, SourceType
-from macro_sentiment.signals.aggregator import WindowAggregate, aggregate
+from macro_sentiment.signals.aggregator import WindowAggregate
 from macro_sentiment.signals.baseline import Baseline, compute_baseline, zscore
 from macro_sentiment.signals.engine import SignalEngine
 from macro_sentiment.signals.rules import EuphoriaRule, FedToneRule, PanicRule

@@ -3,6 +3,7 @@
 Çalıştırma: uvicorn macro_sentiment.api.main:app --reload
   GET /                     → canlı dashboard
   GET /health
+  GET /metrics              → Prometheus metrikleri (Faz 12)
   GET /v1/signals, /v1/sentiment/{entity}
   GET /v1/cas/sentiment/{entity}, /v1/cas/shocks?since=...
   GET /v1/review/pending, POST /v1/review/{id}/approve|reject
@@ -11,10 +12,11 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse
 
 from .. import __version__
+from ..observability import metrics as obs_metrics
 from ..observability.logging import configure_logging
 from ..storage.db import dispose_db, init_db
 from .dashboard import DASHBOARD_HTML
@@ -48,3 +50,9 @@ async def dashboard() -> str:
 @app.get("/health", tags=["system"])
 async def health() -> dict:
     return {"status": "ok", "version": __version__}
+
+
+@app.get("/metrics", tags=["system"])
+async def metrics() -> Response:
+    payload, content_type = obs_metrics.render()
+    return Response(content=payload, media_type=content_type)
