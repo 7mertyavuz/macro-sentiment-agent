@@ -180,7 +180,8 @@ def test_valid_scenario_still_works_with_comments_and_blanks(tmp_path):
     good.write_text(
         "# yorum satırı\n"
         "\n"
-        '{"t": 0, "type": "shock", "kind": "panic", "entity": "BTC", "magnitude": 0.5}\n'
+        '{"t": 0, "type": "shock", "kind": "panic", "entity": "BTC", "magnitude": 0.5}\n',
+        encoding="utf-8",
     )
     player = ScenarioPlayer.from_jsonl(good)
     # shocks_between alt sınır hariç (since, clock]; t=0 şokunu görmek için
