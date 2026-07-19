@@ -9,6 +9,10 @@ Karar destek üretir — **işlem yapmaz, yatırım tavsiyesi vermez.**
 
 <br>
 
+**🌐 Dil:** Türkçe · [English](README.en.md)
+
+<br>
+
 [![CI](https://github.com/7mertyavuz/macro-sentiment-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/7mertyavuz/macro-sentiment-agent/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%20|%203.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
