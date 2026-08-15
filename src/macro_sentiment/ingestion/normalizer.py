@@ -1,13 +1,11 @@
-"""Normalizasyon — kaynağa özel ham yanıtı ortak RawDocument şemasına çevirir.
+"""Normalizasyon yardımcıları — metin temizliği ve dil tespiti.
 
-Connector'lar genelde kendi normalize'ını yapar; bu modül ortak yardımcıları
-(tarih ayrıştırma, dil tespiti, alan temizliği) toplar. TODO(Faz 1).
+Kaynağa özel alan eşlemesini her connector kendi `fetch()` metodunda yapıyor;
+bu modül yalnızca ortak metin yardımcılarını barındırır.
 """
 from __future__ import annotations
 
 import re
-
-from ..core.models import RawDocument
 
 _URL_RE = re.compile(r"https?://\S+")
 _WHITESPACE_RE = re.compile(r"\s+")
@@ -15,7 +13,13 @@ _CASHTAG_KEEP_RE = re.compile(r"^\$[A-Za-z]{1,5}$")
 
 
 def detect_lang(text: str) -> str:
-    # TODO(Faz 1): hızlı dil tespiti (örn. fasttext/langid).
+    """Dil tespiti — şu an SABİT "en" döndürür.
+
+    Bu bir stub'dır ve öyle olduğu açıkça yazılmıştır: kaynaklarımız (RSS,
+    NewsAPI, Fed, StockTwits) fiilen İngilizce yayın yapıyor, dolayısıyla
+    yanlış bir cevap üretmiyor — ama bir dil TESPİTİ de yapmıyor. Türkçe/çok
+    dilli kaynak eklenirse fasttext/langid gerekir.
+    """
     return "en"
 
 
@@ -34,9 +38,10 @@ def strip_social_noise(text: str) -> str:
     return cleaned
 
 
-def normalize(raw_meta: dict, *, source: str) -> RawDocument:
-    # TODO(Faz 1): kaynağa özel alan eşleme + temizlik.
-    raise NotImplementedError
+# `normalize()` KALDIRILDI. Fırlatan bir gövde bırakmak tuzaktır: çağıran
+# fonksiyonun var olduğunu sanır. Kaynağa özel alan eşlemesini her connector
+# kendi `fetch()` metodunda yapıyor (bkz. sources/*_connector.py); ortak bir
+# normalize katmanı için gerçek bir ihtiyaç doğmadı. Buradaki yardımcılar
+# (detect_lang, strip_social_noise) connector'lar tarafından kullanılıyor.
 
-
-__all__ = ["detect_lang", "strip_social_noise", "normalize"]
+__all__ = ["detect_lang", "strip_social_noise"]

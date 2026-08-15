@@ -28,6 +28,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 
 from ..signals.aggregator import WindowAggregate, aggregate
+from ..signals.famafrench import factor_tilt
 from .cas_contracts import SHOCK_KINDS, SentimentState, ShockEvent
 
 # Sinyal tipinden şok yarılanma süresi (saniye). Panik hızlı söner, Fed tonu uzun.
@@ -65,8 +66,13 @@ def _run(coro):
         return ex.submit(asyncio.run, coro).result()
 
 
-def aggregate_to_state(agg: WindowAggregate, ts: datetime | None = None) -> SentimentState:
-    """Bir WindowAggregate'i sözleşmedeki SentimentState'e çevirir."""
+def aggregate_to_state(agg: WindowAggregate, ts: datetime | None = None,
+                       insider: float = 0.0) -> SentimentState:
+    """Bir WindowAggregate'i sözleşmedeki SentimentState'e çevirir.
+
+    `insider`: SEC Form 4 baskısı [-1,1]. Aggregate bu bilgiyi taşımaz (farklı
+    bir kaynak tipinden gelir), o yüzden çağıran tarafından geçilir.
+    """
     src = dict(agg.source_breakdown or {})
     fed_tone: float | None = None
     if agg.entity == "FED" or "fed" in src:
@@ -85,6 +91,13 @@ def aggregate_to_state(agg: WindowAggregate, ts: datetime | None = None) -> Sent
         confidence=_clamp(agg.mean_confidence, 0.0, 1.0),
         fed_tone=fed_tone,
         source_breakdown=src,
+        # Şema 1.1: içeriden öğrenen baskısı ve Fama-French stil eğilimi.
+        insider_pressure=_clamp(insider, -1.0, 1.0),
+        factor_tilt=factor_tilt(
+            polarity=agg.mean_polarity, fed_tone=fed_tone,
+            fear=agg.mean_fear, greed=agg.mean_greed,
+            uncertainty=agg.mean_uncertainty, confidence=agg.mean_confidence,
+        ),
         ts=ts or datetime.now(timezone.utc),
     )
 
@@ -111,7 +124,14 @@ def _synthetic_state(entity: str, ts: datetime) -> SentimentState:
         entity=entity, polarity=polarity, intensity=intensity,
         emotion={"fear": fear, "greed": greed, "uncertainty": uncertainty},
         confidence=confidence, fed_tone=fed_tone,
-        source_breakdown={"news": polarity}, ts=ts,
+        source_breakdown={"news": polarity},
+        # Offline mod da 1.1 alanlarını doldurur; aksi halde adaptör
+        # tarafında "alan var mı yok mu" belirsizliği doğardı.
+        insider_pressure=round(_clamp(polarity * unit(6), -1.0, 1.0), 4),
+        factor_tilt=factor_tilt(polarity=polarity, fed_tone=fed_tone, fear=fear,
+                                greed=greed, uncertainty=uncertainty,
+                                confidence=confidence),
+        ts=ts,
     )
 
 

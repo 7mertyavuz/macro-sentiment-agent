@@ -17,7 +17,10 @@ from datetime import datetime, timezone
 from .cas_contracts import SentimentState, ShockEvent
 
 # Sözleşme şeması sürümü. Alan eklenirse/anlamı değişirse artırılır.
-CAS_SCHEMA_VERSION = "1.0"
+# 1.1: SentimentState'e insider_pressure + factor_tilt eklendi. Ileri VE geri
+# uyumlu -- yeni alanlar varsayilanli, eski tuketiciler bilinmeyen anahtarlari
+# zaten yok sayiyor.
+CAS_SCHEMA_VERSION = "1.1"
 
 
 def _to_iso(ts: datetime) -> str:
@@ -47,6 +50,8 @@ def sentiment_state_to_dict(state: SentimentState) -> dict:
         "confidence": state.confidence,
         "fed_tone": state.fed_tone,
         "source_breakdown": dict(state.source_breakdown),
+        "insider_pressure": getattr(state, "insider_pressure", 0.0),
+        "factor_tilt": dict(getattr(state, "factor_tilt", {}) or {}),
         "ts": _to_iso(state.ts),
     }
 
@@ -62,6 +67,8 @@ def sentiment_state_from_dict(d: dict) -> SentimentState:
         confidence=float(d["confidence"]),
         fed_tone=(None if d.get("fed_tone") is None else float(d["fed_tone"])),
         source_breakdown=dict(d.get("source_breakdown", {})),
+        insider_pressure=float(d.get("insider_pressure", 0.0) or 0.0),
+        factor_tilt=dict(d.get("factor_tilt", {}) or {}),
         ts=_from_iso(d["ts"]),
     )
 

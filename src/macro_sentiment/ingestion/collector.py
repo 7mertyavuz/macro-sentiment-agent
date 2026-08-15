@@ -4,9 +4,13 @@ Stream destekleyen kaynaklar (X) sürekli dinlenir; diğerleri polling ile çeki
 """
 from __future__ import annotations
 
-from datetime import datetime
+import asyncio
+import logging
+from datetime import datetime, timedelta, timezone
 
 from ..core.contracts import Deduplicator, MessageQueue, SourceConnector
+
+log = logging.getLogger(__name__)
 
 RAW_TOPIC = "raw.documents"
 
@@ -18,16 +22,39 @@ class Collector:
         self.dedup = dedup
 
     async def run_once(self, since: datetime) -> int:
-        """Tek çekim döngüsü: çek → dedup → kuyruğa yay. İşlenen yeni belge sayısını döndürür.
+        """Tek çekim döngüsü: çek → dedup → kuyruğa yay. Yeni belge sayısını döndürür.
 
-        TODO(Faz 1):
-          - connector.fetch(since) çağır, rate-limit'e uy (token-bucket + backoff).
-          - her belge için dedup.is_duplicate kontrolü; yeniyse mark_seen + publish.
-          - ham belgeyi storage'a yaz (backfill için).
-          - hata yönetimi + dead-letter.
+        Uzun süre `NotImplementedError` fırlatıyordu; pratikte
+        `worker/tasks.py::ingest_all_once` bu işi yapıyordu. Fırlatan bir gövde
+        bırakmak bir tuzaktır: çağıran, kodun var olduğunu sanır.
+
+        Tek connector'ın hatası turu düşürmez — kaynak başına izole edilir.
         """
-        raise NotImplementedError
+        try:
+            docs = await self.connector.fetch(since)
+        except Exception as exc:
+            log.warning("%s çekilemedi, bu tur atlanıyor: %s", self.connector.source_id, exc)
+            return 0
+
+        published = 0
+        for doc in docs:
+            try:
+                if await self.dedup.is_duplicate(doc):
+                    continue
+                await self.dedup.mark_seen(doc)
+                await self.queue.publish(RAW_TOPIC, doc.model_dump(mode="json"))
+                published += 1
+            except Exception as exc:
+                # Tek bir belge tüm partiyi düşürmemeli.
+                log.warning("Belge yayınlanamadı (%s): %s", getattr(doc, "id", "?"), exc)
+        return published
 
     async def run_forever(self, interval: float) -> None:
-        """Polling döngüsü (interval saniyede bir run_once). TODO(Faz 1)."""
-        raise NotImplementedError
+        """`interval` saniyede bir `run_once` — iptal edilene kadar."""
+        since = datetime.now(timezone.utc) - timedelta(seconds=interval)
+        while True:
+            started = datetime.now(timezone.utc)
+            n = await self.run_once(since)
+            log.info("%s: %d yeni belge", self.connector.source_id, n)
+            since = started
+            await asyncio.sleep(interval)

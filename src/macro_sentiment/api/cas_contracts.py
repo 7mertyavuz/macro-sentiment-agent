@@ -33,6 +33,9 @@ class SentimentState:
     fed_tone: float | None          # hawkish(+1)/dovish(-1) ekseni; yoksa None
     source_breakdown: dict          # {"news","social","fed"} -> polarite
     ts: datetime
+    # --- şema 1.1 eklentileri (varsayılanlı: 1.0 tüketicileri kırılmaz) ---
+    insider_pressure: float = 0.0   # [-1,+1] SEC Form 4 alım/satım baskısı
+    factor_tilt: dict = field(default_factory=dict)  # {"mkt","smb","hml"} her biri [-1,1]
 
 
 @dataclass

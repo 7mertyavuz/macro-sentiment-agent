@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     fred_api_key: str | None = None
     stocktwits_enabled: bool = False
     social_symbols: list[str] = ["AAPL", "MSFT", "TSLA", "BTC.X", "SPY"]
+    # SEC Form 4 (içeriden öğrenenler) anahtarsızdır, ama EDGAR'a düzenli
+    # istek göndermek adil-kullanım taahhüdüdür — açık onayla açılır.
+    insider_enabled: bool = False
 
     finbert_model: str = "ProsusAI/finbert"
     use_finbert: bool = True

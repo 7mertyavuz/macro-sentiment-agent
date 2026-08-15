@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .base import BaseConnector
 from .fed_connector import FedConnector
+from .insider_connector import InsiderConnector
 from .newsapi_connector import NewsAPIConnector
 from .rss_connector import RSSConnector
 from .social_connector import SocialConnector
@@ -13,6 +14,7 @@ REGISTRY: dict[str, type[BaseConnector]] = {
     NewsAPIConnector.source_id: NewsAPIConnector,
     FedConnector.source_id: FedConnector,
     SocialConnector.source_id: SocialConnector,
+    InsiderConnector.source_id: InsiderConnector,
 }
 
 
@@ -41,4 +43,8 @@ def active_connectors(settings) -> list[BaseConnector]:
         connectors.append(FedConnector(settings.fred_api_key))
     if getattr(settings, "stocktwits_enabled", False):
         connectors.append(SocialConnector(platform="stocktwits", symbols=settings.social_symbols))
+    # SEC Form 4 anahtarsız ve herkese açıktır, ama EDGAR'a düzenli istek
+    # göndermek bir taahhüttür (adil kullanım politikası) — açık onayla açılır.
+    if getattr(settings, "insider_enabled", False):
+        connectors.append(InsiderConnector())
     return connectors

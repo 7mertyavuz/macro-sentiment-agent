@@ -1,15 +1,19 @@
 """REST uç noktaları — sinyal ve duyarlılık sorguları."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..core.models import Signal
 from ..signals.review import APPROVED, PENDING, REJECTED, ReviewFeedback
 from ..storage.repositories import FeedbackRepository, SentimentRepository, SignalRepository
 from .cas_transport import CAS_SCHEMA_VERSION, sentiment_state_to_dict, shock_event_to_dict
 from .sentiment_feed import SentimentFeed
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1", tags=["signals"])
 cas_router = APIRouter(prefix="/v1/cas", tags=["cas"])
@@ -40,18 +44,34 @@ async def get_sentiment(entity: str, limit: int = Query(50, le=500)) -> dict:
 
 
 # ---- CAS köprüsü HTTP uçları (Faz 6) -------------------------------------------
-# DB'ye erişilemezse (bağlantı hatası, tablo yok, ...) sessizce offline moda
-# düşer; her iki uç da anahtar/DB olmadan geçerli JSON döndürür.
+# DB'ye erişilemezse offline moda düşer; her iki uç da anahtar/DB olmadan
+# geçerli JSON döndürür.
+#
+# ÖNEMLİ: eskiden `except Exception` idi ve BİR PROGRAMLAMA HATASI (TypeError,
+# AttributeError, şema uyuşmazlığı) da "offline mode" olarak maskeleniyordu —
+# yani uç 200 dönerken sistem aslında bozuktu ve kimse fark etmiyordu.
+# Artık yalnızca ALTYAPI hataları yutuluyor; mantık hataları yukarı fırlıyor.
+_INFRA_ERRORS = (OSError, ConnectionError, TimeoutError, SQLAlchemyError)
+
+
+def _fallback_reason(exc: Exception) -> str:
+    return f"{type(exc).__name__}: {exc}"[:200]
+
 
 @cas_router.get("/sentiment/{entity}")
 async def cas_sentiment(entity: str) -> dict:
+    reason = None
     try:
         state = SentimentFeed(mode="live").latest(entity)
         mode = "live"
-    except Exception:
+    except _INFRA_ERRORS as exc:
+        log.warning("CAS sentiment canlı okuma başarısız, offline'a düşülüyor: %s", exc)
         state = SentimentFeed(mode="offline").latest(entity)
-        mode = "offline"
-    return {"mode": mode, **sentiment_state_to_dict(state)}
+        mode, reason = "offline", _fallback_reason(exc)
+    out = {"mode": mode, **sentiment_state_to_dict(state)}
+    if reason:
+        out["fallback_reason"] = reason      # neden offline olduğu görünür olsun
+    return out
 
 
 @cas_router.get("/shocks")
@@ -64,7 +84,8 @@ async def cas_shocks(
     try:
         shocks = SentimentFeed(mode="live").shocks(since_ts)
         mode = "live"
-    except Exception:
+    except _INFRA_ERRORS as exc:
+        log.warning("CAS shocks canlı okuma başarısız, offline'a düşülüyor: %s", exc)
         shocks = SentimentFeed(mode="offline").shocks(since_ts)
         mode = "offline"
     return {
