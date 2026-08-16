@@ -3,7 +3,16 @@ from __future__ import annotations
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Hepsi anahtarsız ve public. Kripto kaynakları BİLEREK burada: varsayılan liste
+# yalnızca hisse senedi haberi çekiyordu (Yahoo AAPL + Investing.com), yani
+# BTC/ETH/SOL için tek bir belge bile gelmiyordu. Duyu, haber olmadığı için değil
+# HABERİN GELMEDİĞİ İÇİN sessiz kalıyordu — ve bu ikisi dışarıdan ayırt edilemez.
 DEFAULT_RSS_FEEDS: list[str] = [
+    # kripto
+    "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    "https://cointelegraph.com/rss",
+    "https://cryptoslate.com/feed/",
+    # makro / hisse (rejim bağlamı: Fed, oran, risk iştahı)
     "https://feeds.finance.yahoo.com/rss/2.0/headline?s=AAPL&region=US&lang=en-US",
     "https://www.investing.com/rss/news_25.rss",
 ]

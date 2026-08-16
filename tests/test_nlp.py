@@ -55,3 +55,65 @@ async def test_finbert_fallback_scores_document():
     scores = await model.score(doc, await ext.extract(doc))
     assert scores and scores[0].polarity < 0
     assert scores[0].model_version == "lexicon-fallback@1"
+
+
+# ── NER: sözcük sınırı ve kripto kapsamı ──────────────────────────
+def _ner_doc(title: str):
+    now = datetime.now(timezone.utc)
+    return RawDocument(id="n1", source="rss:test", source_type=SourceType.NEWS,
+                       title=title, body="", published_at=now, fetched_at=now,
+                       content_hash="h")
+
+
+@pytest.mark.asyncio
+async def test_solana_is_recognised():
+    """Sözlükte yalnızca bitcoin/ethereum vardı; 'Solana' geçen her belge
+    MARKET'e düşüyordu, yani SOL için duyu haber gelse bile hiç doğmuyordu."""
+    from macro_sentiment.nlp.ner import FinancialEntityExtractor
+
+    ents = await FinancialEntityExtractor().extract(_ner_doc("Solana ETF approved"))
+    assert {e.ticker for e in ents} == {"SOL"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", ["The console was sold out",
+                                  "Whether the method works",
+                                  "Canada raises rates",
+                                  "Together we resolve this"])
+async def test_short_aliases_do_not_match_inside_words(text):
+    """Alt-dize eşleşmesi bir yanlış-pozitif makinesidir: sol→console/sold,
+    eth→whether/method, ada→Canada. Olmayan bir varlığa üretilen skor GERÇEK
+    görünür — sessiz gürültünün en kötü türü."""
+    from macro_sentiment.nlp.ner import FinancialEntityExtractor
+
+    ents = await FinancialEntityExtractor().extract(_ner_doc(text))
+    assert {e.ticker for e in ents} == {"MARKET"}
+
+
+@pytest.mark.asyncio
+async def test_fomc_maps_to_fed_by_its_own_name():
+    """Eskiden 'fed' ⊂ 'Federal Open Market Committee' kazasıyla eşleşiyordu."""
+    from macro_sentiment.nlp.ner import FinancialEntityExtractor
+
+    ents = await FinancialEntityExtractor().extract(
+        _ner_doc("Federal Open Market Committee statement"))
+    assert "FED" in {e.ticker for e in ents}
+
+
+@pytest.mark.asyncio
+async def test_crypto_assets_are_classed_as_crypto():
+    from macro_sentiment.core.models import AssetClass
+    from macro_sentiment.nlp.ner import FinancialEntityExtractor
+
+    ents = await FinancialEntityExtractor().extract(_ner_doc("Solana and Bitcoin rally"))
+    assert all(e.asset_class == AssetClass.CRYPTO for e in ents)
+
+
+def test_default_feeds_include_crypto_sources():
+    """Varsayılan liste yalnızca hisse haberi çekiyordu: BTC/ETH/SOL için tek
+    belge bile gelmiyordu ve duyu 'haber yok' diye değil 'kaynak yok' diye
+    sessizdi — ikisi dışarıdan ayırt edilemez."""
+    from macro_sentiment.core.config import DEFAULT_RSS_FEEDS
+
+    joined = " ".join(DEFAULT_RSS_FEEDS).lower()
+    assert any(k in joined for k in ("coindesk", "cointelegraph", "cryptoslate"))
