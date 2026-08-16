@@ -23,9 +23,13 @@ from macro_sentiment.signals.aggregator import WindowAggregate
 from macro_sentiment.signals.famafrench import dominant_style, factor_tilt
 from macro_sentiment.signals.rules import DEFAULT_RULES, BreakoutRule, NarrativeRule
 from macro_sentiment.sources.insider_connector import (
+    BUY_WEIGHT,
+    REGIME_SELL_MULTIPLIER,
+    SELL_WEIGHT,
     InsiderConnector,
     classify_transaction,
     insider_pressure,
+    sell_weight_for,
 )
 from macro_sentiment.sources.registry import REGISTRY
 
@@ -75,6 +79,50 @@ async def test_insider_connector_offline_mode_is_networkless():
 
 def test_insider_connector_is_registered():
     assert "insider:sec_form4" in REGISTRY
+
+
+# ── rejime gore satis agirligi ────────────────────────────────────
+def test_sell_weight_is_neutral_without_a_regime():
+    """Rejim yoksa davranis eskisiyle BIREBIR ayni — geriye uyumlu."""
+    assert sell_weight_for(None) == pytest.approx(SELL_WEIGHT)
+    assert sell_weight_for("bilinmeyen_rejim") == pytest.approx(SELL_WEIGHT)
+
+
+def test_bear_and_crisis_make_sells_count_more():
+    """Ayi/krizde bir satis cok daha az rutindir, dolayisiyla daha bilgilendirici."""
+    assert sell_weight_for("crisis") > sell_weight_for("bear_trend")
+    assert sell_weight_for("bear_trend") > sell_weight_for("chop")
+    assert sell_weight_for("chop") > sell_weight_for("bull_trend")
+
+
+def test_same_sell_is_more_negative_in_a_crisis():
+    txs = [{"direction": 1, "value_usd": 100_000},
+           {"direction": -1, "value_usd": 100_000}]
+    bull = insider_pressure(txs, regime="bull_trend")
+    crisis = insider_pressure(txs, regime="crisis")
+    assert crisis < bull, "ayni satis krizde daha agir basmali"
+
+
+def test_regime_never_makes_a_sell_outweigh_a_buy_by_default():
+    """Carpanlar ilimli tutuldu: en agresif rejimde bile satis, alimi ezmemeli.
+
+    Kalibre edilmemis bir egrinin isareti cevirmesi, olculmemis bir iddiayi
+    olculmus gibi sunmak olurdu.
+    """
+    assert max(REGIME_SELL_MULTIPLIER.values()) * SELL_WEIGHT < BUY_WEIGHT
+
+
+def test_custom_multipliers_can_be_injected():
+    """Kalibrasyon noktasi disaridan degistirilebilmeli."""
+    txs = [{"direction": -1, "value_usd": 1}]
+    assert insider_pressure(txs, regime="crisis",
+                            multipliers={"crisis": 3.0}) == pytest.approx(-1.0)
+
+
+def test_pure_buy_stays_at_one_in_every_regime():
+    txs = [{"direction": 1, "value_usd": 1}]
+    for reg in (*REGIME_SELL_MULTIPLIER, None):
+        assert insider_pressure(txs, regime=reg) == pytest.approx(1.0)
 
 
 # ── Fama-French proxy ─────────────────────────────────────────────

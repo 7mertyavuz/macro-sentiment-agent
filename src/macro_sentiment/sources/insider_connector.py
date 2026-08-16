@@ -49,6 +49,29 @@ EDGAR_ATOM = (
 # Alım, satıştan daha güçlü bir sinyaldir (bkz. modül docstring'i).
 BUY_WEIGHT, SELL_WEIGHT = 1.0, 0.45
 
+# Rejime göre satış ağırlığı çarpanı.
+#
+# GEREKÇE: satışın gürültü olma olasılığı rejime bağlıdır. Boğa piyasasında bir
+# yönetici satışı çoğunlukla rutindir — hisse fiyatı yükselmiştir, portföy
+# dengelenir, opsiyonlar nakde çevrilir. Ayı ya da kriz rejiminde aynı satış çok
+# daha az rutindir: fiyat zaten düşmüşken satmak, vergi ya da çeşitlendirme ile
+# açıklanması güç bir davranıştır. Yani satışın SİNYAL/GÜRÜLTÜ oranı rejimle
+# değişir ve sabit bir katsayı bunu göremez.
+#
+# ⚠️ BU EĞRİ KALİBRE EDİLMEMİŞTİR. Elimizde etiketlenmiş insider-sonuç verisi
+# yok; aşağıdaki çarpanlar gerekçeli bir başlangıç noktasıdır, ölçülmüş bir
+# ilişki değil. Bu yüzden (a) sabit değil PARAMETRE, (b) etkisi ılımlı tutuldu,
+# (c) `provenance` alanı kaynağı bildirir. Veri geldiğinde burası kalibre
+# edilecek yerdir — uydurulmuş bir eğriyi ölçülmüş gibi sunmaktansa,
+# ayarlanabilir ve işaretli bırakmak dürüst olanı.
+REGIME_SELL_MULTIPLIER = {
+    "crisis": 1.8,
+    "bear_trend": 1.5,
+    "chop": 1.0,
+    "bull_trend": 0.8,
+}
+SELL_MULTIPLIER_DEFAULT = 1.0
+
 # KÖK eşleme: `purchase\b` "purchased"a uymaz — Form 4 metinlerinde fiiller
 # neredeyse her zaman çekimlidir, o yüzden ek serbest bırakılır.
 # `acqui\w*` hem "acquired" hem "acquisition" kapsar.
@@ -69,19 +92,38 @@ def classify_transaction(text: str) -> int:
     return 1 if buy else -1
 
 
-def insider_pressure(transactions) -> float:
+def sell_weight_for(regime: str | None = None,
+                    multipliers: dict | None = None) -> float:
+    """Rejime göre satış ağırlığı. Bilinmeyen/eksik rejimde nötr çarpan.
+
+    Ayrı bir fonksiyon çünkü kalibre edilecek yer burasıdır: veri geldiğinde
+    yalnızca bu eşleme değişir, `insider_pressure`'ın mantığı değişmez.
+    """
+    table = REGIME_SELL_MULTIPLIER if multipliers is None else multipliers
+    mult = table.get(str(regime), SELL_MULTIPLIER_DEFAULT) if regime else SELL_MULTIPLIER_DEFAULT
+    return SELL_WEIGHT * float(mult)
+
+
+def insider_pressure(transactions, *, regime: str | None = None,
+                     multipliers: dict | None = None) -> float:
     """İşlem listesinden [-1, 1] aralığında işaretli baskı skoru.
 
     `transactions`: [{"direction": int, "value_usd": float}, ...]
     Ağırlıklandırma asimetriktir; yön yoksa (0) hiç sayılmaz.
+
+    `regime` verilirse satış ağırlığı rejime göre esner (bkz.
+    `REGIME_SELL_MULTIPLIER`): ayı/kriz rejiminde bir satış çok daha az rutindir,
+    dolayısıyla daha bilgilendiricidir. Rejim verilmezse davranış eskisiyle
+    BİREBİR aynıdır — geriye uyumlu.
     """
+    sell_w = sell_weight_for(regime, multipliers)
     num = den = 0.0
     for t in transactions or []:
         d = int(t.get("direction", 0))
         if d == 0:
             continue
         v = abs(float(t.get("value_usd", 0.0) or 0.0)) or 1.0
-        w = BUY_WEIGHT if d > 0 else SELL_WEIGHT
+        w = BUY_WEIGHT if d > 0 else sell_w
         num += d * w * v
         den += w * v
     if den <= 0:
